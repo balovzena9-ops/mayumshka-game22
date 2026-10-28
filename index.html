@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>MayUmshka 2</title>
+<script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
   html,body{width:100%;height:100%;overflow:hidden;background:#000;color:#e8e6e0;font-family:Georgia,"Times New Roman",serif;user-select:none}
@@ -255,6 +256,41 @@
   .screen .btnHome{border-color:#3a6a3a;color:#b8e0b8;background:#051005}
   .screen .btnHome:hover{background:#0a200a;border-color:#22cc44;color:#fff;
     box-shadow:0 0 22px rgba(40,200,80,.55)}
+
+  /* Device selection screen tweaks */
+  #deviceScreen .big{
+    font-size:clamp(28px,5vw,52px);
+    letter-spacing:.35em;
+    padding-left:.35em;
+    color:#d8d4ca;
+    text-shadow:0 0 30px rgba(160,50,50,.55),0 0 80px rgba(90,20,20,.35);
+  }
+  #deviceScreen .sub{
+    color:#7a4a48;
+    letter-spacing:.55em;
+    padding-left:.55em;
+    text-transform:uppercase;
+  }
+  #deviceScreen button{
+    letter-spacing:.35em;
+    font-size:15px;
+    padding:16px 34px;
+    min-width:280px;
+  }
+  #deviceScreen #btnDevicePC{
+    border-color:#2a5a8a;color:#c0e0ff;background:#030712;
+  }
+  #deviceScreen #btnDevicePC:hover{
+    border-color:#3a9aff;color:#fff;background:#071a2c;
+    box-shadow:0 0 22px rgba(58,154,255,.55);
+  }
+  #deviceScreen #btnDeviceMobile{
+    border-color:#8a2a5a;color:#ffc0e0;background:#120310;
+  }
+  #deviceScreen #btnDeviceMobile:hover{
+    border-color:#ff3a8a;color:#fff;background:#2c071a;
+    box-shadow:0 0 22px rgba(255,58,138,.55);
+  }
 
   #extra{position:fixed;inset:0;display:none;z-index:70;pointer-events:auto;
     background:radial-gradient(ellipse at 30% 50%, rgba(30,5,10,.95), rgba(0,0,0,.98));
@@ -864,6 +900,14 @@
     <button id="btnHomeWin" class="btnHome">🏠 ДОМОЙ</button>
   </div>
 
+  <div class="screen" id="deviceScreen">
+    <div class="big">ВЫБЕРИТЕ УСТРОЙСТВО</div>
+    <div class="sub">Как вы хотите играть?</div>
+    <button id="btnDevicePC">🖥 ПК (WASD + мышь)</button>
+    <button id="btnDeviceMobile">📱 Мобильное устройство</button>
+    <button id="btnDeviceCancel" class="btnHome">← НАЗАД</button>
+  </div>
+
   <div id="nightSplash">
     <div class="nsNight">НОЧЬ 1</div>
     <div class="nsTime">00:00</div>
@@ -903,6 +947,20 @@ if (typeof THREE === 'undefined') {
   document.body.innerHTML = '<div style="color:#c33;padding:40px;font-size:20px;font-family:monospace;">Ошибка загрузки Three.js</div>';
   throw new Error('no three');
 }
+
+// === VK BRIDGE INIT ===
+if (typeof vkBridge !== 'undefined') {
+  vkBridge.send('VKWebAppInit')
+    .then((data) => {
+      if (data.result) {
+        console.log("VK Bridge успешно запущен!");
+      }
+    })
+    .catch((error) => {
+      console.error("Ошибка инициализации VK Bridge:", error);
+    });
+}
+
 const $=id=>document.getElementById(id);
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const rand=(a,b)=>a+Math.random()*(b-a);
@@ -2494,7 +2552,11 @@ function toggleMapAction(action){
   }
   updateHUD(); drawMobileMap(); checkPhoneProgress();
 }
-function openMobileMap(){ if (!isMobile || gameState !== 'playing' || jumpscareActive) return; mobileMapOpen = true; $('mapOverlay').classList.add('on'); drawMobileMap(); beep(660, 0.06, 'square', 0.1); checkPhoneProgress(); }
+function openMobileMap(){
+  if (gameState !== 'playing' || jumpscareActive) return;
+  if (pcMode && document.pointerLockElement) document.exitPointerLock();
+  mobileMapOpen = true; $('mapOverlay').classList.add('on'); drawMobileMap(); beep(660, 0.06, 'square', 0.1); checkPhoneProgress();
+}
 function closeMobileMap(){ mobileMapOpen = false; $('mapOverlay').classList.remove('on'); checkPhoneProgress(); }
 
 function buildDustParticles(){
@@ -3167,6 +3229,7 @@ let jumpscareActive=false,jumpscareTimer=0,jumpscareKey='';
 let pointerLocked=false;
 let phoneCallState='idle', phoneCallScript=[], phoneCallIdx=0, phoneWaitingFor=null;
 let isMobile=true;
+let pcMode=false;
 let mobileMoveX=0, mobileMoveY=0;
 let _joyTargetX=0, _joyTargetY=0;
 let mobileJoystickId=null;
@@ -3199,11 +3262,10 @@ function isBlocked(x,z){
   if (doorLClosed){ const w={x1:-5.4,x2:-5.0,z1:1.0,z2:3.0}; const cx=clamp(x,w.x1,w.x2), cz=clamp(z,w.z1,w.z2); if ((x-cx)**2+(z-cz)**2<PR*PR) return true; }
   if (doorRClosed){ const w={x1:5.0,x2:5.4,z1:1.0,z2:3.0}; const cx=clamp(x,w.x1,w.x2), cz=clamp(z,w.z1,w.z2); if ((x-cx)**2+(z-cz)**2<PR*PR) return true; }
   if (!exitOpen && !partyMode && z < -45.5 && Math.abs(x) < 3.5) return true;
+  // ФИКС: убраны широкие фантомные стены у шкафов (было: x>4.1 / x<-4.1 при z<-1.2)
   if (z > -3.5 && z < 5.4 && Math.abs(x) < 5.4){
     if (x > 3.0 && x < 4.2 && z < -1.9) return true;
     if (x > -4.2 && x < -3.0 && z < -1.9) return true;
-    if (x > 4.1 && z < -1.2) return true;
-    if (x < -4.1 && z < -1.2) return true;
   }
   return false;
 }
@@ -3240,6 +3302,7 @@ function interact(){
   showHint('Подойди к двери или посмотри вверх в офисе',1.5);
 }
 function startSit(){
+  if (pcMode && document.pointerLockElement) document.exitPointerLock();
   const startPos = playerCam.position.clone(); const startYaw = player.yaw; const startPitch = player.pitch;
   seatAnim = {fromPos: startPos, toPos: SEAT_CAM_POS.clone(), fromYaw: startYaw, toYaw: SEAT_LOOK_YAW, fromPitch: startPitch, toPitch: SEAT_LOOK_PITCH, t: 0, dur: 0.75, endingSit: false};
   seated = true; player.pos.set(SEAT_CAM_POS.x, 0, SEAT_CAM_POS.z);
@@ -3661,6 +3724,18 @@ function updatePlayer(dt){
     player.pitch = clamp(player.pitch, -1.4, 1.4);
   }
   if (!camOpen){
+    // PC: клавиатура WASD
+    if (pcMode){
+      let ix = 0, iy = 0;
+      if (keys['KeyW'] || keys['ArrowUp']) iy -= 1;
+      if (keys['KeyS'] || keys['ArrowDown']) iy += 1;
+      if (keys['KeyA'] || keys['ArrowLeft']) ix -= 1;
+      if (keys['KeyD'] || keys['ArrowRight']) ix += 1;
+      const mag = Math.hypot(ix, iy);
+      if (mag > 0) { ix /= mag; iy /= mag; }
+      _joyTargetX = ix;
+      _joyTargetY = iy;
+    }
     // Сглаживание джойстика
     const joySmooth = Math.min(1, dt * 14);
     mobileMoveX += (_joyTargetX - mobileMoveX) * joySmooth;
@@ -3766,6 +3841,7 @@ function openPanelPuzzle(){
   panelLeftOrder = [...PANEL_COLORS].sort(()=>Math.random()-0.5);
   panelRightOrder = [...PANEL_COLORS].sort(()=>Math.random()-0.5);
   panelMatched.clear(); panelSelectedLeft = null;
+  if (document.pointerLockElement) document.exitPointerLock();
   renderPanelWires(); $('panelOverlay').classList.add('on'); beep(440, 0.1, 'sine', 0.12);
 }
 function closePanelPuzzle(){ $('panelOverlay').classList.remove('on'); panelSelectedLeft = null; beep(220, 0.08, 'square', 0.08); }
@@ -3965,9 +4041,11 @@ function updateMapAvailability(){
 function startGame(custom){
   gameState='playing'; sceneState='game';
   gamePaused = false; virusActive = false; virusClicks = 0; seatedTime = 0;
+  for (const k in keys) keys[k] = false;
   $('virusOverlay').classList.remove('on'); $('pauseModal').classList.remove('on');
   window.__PARTY_CLEAN__ = !!partyMode;
   isCustomNight=!!custom;
+  window.isCustomNight = isCustomNight;
   if (custom) currentBloody=customBloody; else currentBloody=(night===5) && !partyMode;
   const needBloody=currentBloody && !partyMode;
   if (night5Bloody!==needBloody){
@@ -4066,6 +4144,7 @@ function goToMenu(){
   gameState='menu'; sceneState='menu'; partyMode = false;
   document.body.classList.remove('party-mode');
   gamePaused = false; virusActive = false; virusClicks = 0; seatedTime = 0;
+  for (const k in keys) keys[k] = false;
   $('virusOverlay').classList.remove('on'); $('pauseModal').classList.remove('on');
   window.__PARTY_CLEAN__ = false; eggMode = null; clearEggPhones();
   const tint = $('eggTint'); if (tint) tint.className = '';
@@ -4078,6 +4157,7 @@ function goToMenu(){
   $('overScreen').classList.remove('on');
   $('winScreen').classList.remove('on');
   $('nightSplash').classList.remove('on');
+  $('deviceScreen').classList.remove('on');
   $('hud').classList.add('hidden');
   $('phoneSub').classList.remove('on');
   $('phoneIcon').classList.remove('on');
@@ -4102,6 +4182,7 @@ function goToMenu(){
 let nightTransitionInterval = null;
 function startNightTransition(fromWin){
   $('menu').classList.add('hidden');
+  $('deviceScreen').classList.remove('on');
   $('extra').classList.remove('on');
   $('overScreen').classList.remove('on');
   $('winScreen').classList.remove('on');
@@ -4379,8 +4460,8 @@ try {
   }
 })();
 
-$('pauseBtn').addEventListener('click', () => { if (gameState !== 'playing' || jumpscareActive || virusActive) return; gamePaused = true; $('pauseModal').classList.add('on'); if (audioCtx) beep(500, 0.08, 'square', 0.12); });
-$('pauseResume').addEventListener('click', () => { gamePaused = false; $('pauseModal').classList.remove('on'); if (audioCtx) beep(700, 0.08, 'square', 0.12); });
+$('pauseBtn').addEventListener('click', () => { if (gameState !== 'playing' || jumpscareActive || virusActive) return; gamePaused = true; $('pauseModal').classList.add('on'); if (pcMode && document.pointerLockElement) document.exitPointerLock(); if (audioCtx) beep(500, 0.08, 'square', 0.12); });
+$('pauseResume').addEventListener('click', () => { gamePaused = false; $('pauseModal').classList.remove('on'); if (pcMode && renderer && renderer.domElement){ try { renderer.domElement.requestPointerLock(); } catch(e){} } if (audioCtx) beep(700, 0.08, 'square', 0.12); });
 $('pauseToMenu').addEventListener('click', () => { gamePaused = false; $('pauseModal').classList.remove('on'); goToMenu(); });
 $('virusRestart').addEventListener('click', virusClick);
 $('virusRestart').addEventListener('touchstart', (e)=>{ e.preventDefault(); virusClick(); }, {passive:false});
@@ -4478,11 +4559,11 @@ function bindMenuButton(id, handler) {
   el.addEventListener('pointerdown', fire);
   el.addEventListener('click', fire);
 }
-bindMenuButton('btnPlay', () => { initAudio(); night = 1; night5Bloody = false; startNightTransition(false); });
+bindMenuButton('btnPlay', () => { initAudio(); showDeviceSelect(); });
 bindMenuButton('btnExtra', () => { initAudio(); openExtra(); });
 bindMenuButton('btnSet', () => { $('settingsModal').classList.add('on'); });
 bindMenuButton('btnInfo', () => { $('creditsModal').classList.add('on'); });
-bindMenuButton('btnNew', () => { initAudio(); night = 1; night5Bloody = false; startNightTransition(false); });
+bindMenuButton('btnNew', () => { initAudio(); showDeviceSelect(); });
 bindMenuButton('btnCont', () => { initAudio(); startNightTransition(false); });
 
 const _btnSettings = $('btnSettings'); if (_btnSettings) _btnSettings.addEventListener('click', () => { $('settingsModal').classList.add('on'); });
@@ -4494,7 +4575,7 @@ $('btnNext').addEventListener('click', () => {
   $('winScreen').classList.remove('on');
   if (isCustomNight) { goToMenu(); return; }
   if (night >= 5) { night = 1; goToMenu(); }
-  else { night++; startNightTransition(true); }
+  else { night++; window.night = night; startNightTransition(true); }
 });
 $('btnHomeWin').addEventListener('click', () => { $('winScreen').classList.remove('on'); goToMenu(); });
 
@@ -4645,6 +4726,92 @@ function handleMapTap(clientX, clientY){
 }
 $('mapCanvas').addEventListener('click', e => { e.stopPropagation(); handleMapTap(e.clientX, e.clientY); });
 $('mapCanvas').addEventListener('touchstart', e => { e.stopPropagation(); if (e.touches.length !== 1) return; if (handleMapTap(e.touches[0].clientX, e.touches[0].clientY)){ e.preventDefault(); } }, {passive:false});
+
+// === DEVICE SELECTION ===
+function showDeviceSelect(){
+  $('menu').classList.add('hidden');
+  $('deviceScreen').classList.add('on');
+}
+function selectDevice(usePC){
+  pcMode = usePC;
+  isMobile = !usePC;
+  $('deviceScreen').classList.remove('on');
+  initAudio();
+  night = 1; window.night = 1; night5Bloody = false;
+  startNightTransition(false);
+}
+$('btnDevicePC').addEventListener('click', () => selectDevice(true));
+$('btnDeviceMobile').addEventListener('click', () => selectDevice(false));
+$('btnDeviceCancel').addEventListener('click', () => {
+  $('deviceScreen').classList.remove('on');
+  $('menu').classList.remove('hidden');
+});
+
+// === PC CONTROLS ===
+document.addEventListener('keydown', e => {
+  if (!pcMode) return;
+  if (['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) {
+    keys[e.code] = true;
+  }
+  if (gameState !== 'playing' || jumpscareActive) return;
+  if (e.code === 'KeyE') { if (!mobileMapOpen) interact(); e.preventDefault(); }
+  else if (e.code === 'KeyC') {
+    if ($('panelOverlay').classList.contains('on')) return;
+    if (!seated) trySitChair(); else toggleCam();
+    e.preventDefault();
+  }
+  else if (e.code === 'KeyM') {
+    if (mobileMapOpen) closeMobileMap(); else openMobileMap();
+    e.preventDefault();
+  }
+  else if (e.code === 'Escape') {
+    if (mobileMapOpen) { closeMobileMap(); return; }
+    if (!jumpscareActive && !virusActive && !gamePaused) {
+      gamePaused = true; $('pauseModal').classList.add('on');
+      if (document.pointerLockElement) document.exitPointerLock();
+      if (audioCtx) beep(500, 0.08, 'square', 0.12);
+    }
+    e.preventDefault();
+  }
+  else if (seated && camOpen) {
+    if (e.code === 'Digit1') { setCam(0); e.preventDefault(); }
+    else if (e.code === 'Digit2') { setCam(1); e.preventDefault(); }
+    else if (e.code === 'Digit3') { setCam(2); e.preventDefault(); }
+    else if (e.code === 'Digit4') { setCam(3); e.preventDefault(); }
+    else if (e.code === 'Digit5') { setCam(4); e.preventDefault(); }
+    else if (e.code === 'Digit6') { setCam(5); e.preventDefault(); }
+    else if (e.code === 'ArrowLeft') { setCam(Math.max(0, camIndex-1)); e.preventDefault(); }
+    else if (e.code === 'ArrowRight') { setCam(Math.min(5, camIndex+1)); e.preventDefault(); }
+  }
+});
+document.addEventListener('keyup', e => {
+  if (!pcMode) return;
+  if (['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) {
+    keys[e.code] = false;
+  }
+});
+if (renderer && renderer.domElement){
+  renderer.domElement.addEventListener('click', () => {
+    if (!pcMode || gameState !== 'playing' || gamePaused || virusActive || jumpscareActive) return;
+    if ($('panelOverlay').classList.contains('on')) return;
+    if (mobileMapOpen) return;
+    if (!document.pointerLockElement) { try { renderer.domElement.requestPointerLock(); } catch(err){} }
+  });
+}
+document.addEventListener('mousemove', e => {
+  if (!pcMode || !document.pointerLockElement) return;
+  if (gameState !== 'playing' || gamePaused || virusActive || jumpscareActive) return;
+  camTargetYaw -= e.movementX * 0.0025 * camSensitivity;
+  camTargetPitch -= e.movementY * 0.0025 * camSensitivity;
+  camTargetPitch = clamp(camTargetPitch, -1.4, 1.4);
+});
+
+// === АВТОЗАПУСК МУЗЫКИ МЕНЮ НА ПЕРВЫЙ КЛИК (аналог script.txt) ===
+window.addEventListener('click', function initMenuMusicOnFirstClick() {
+  initAudio();
+  try { if (typeof startMenuDrone === 'function') startMenuDrone(); } catch(e){}
+  window.removeEventListener('click', initMenuMusicOnFirstClick);
+}, { once: true });
 
 animate();
 </script>
