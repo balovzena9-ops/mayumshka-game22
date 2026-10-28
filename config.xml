@@ -23,7 +23,13 @@
     <!-- Иконка -->
     <icon src="www/icon.png" />
 
-    <!-- Плагин для музыки на месте, но доступ к микрофону заблокирован -->
+    <!-- 🔥 НАСТРОЙКИ ДЛЯ ИСПРАВЛЕНИЯ ЗВУКА В МЕНЮ И СКРИМЕРАХ -->
+    <!-- Разрешает воспроизведение звуков автоматически при старте меню (без клика) -->
+    <preference name="MediaPlaybackRequiresUserAction" value="false" />
+    <!-- Позволяет плагину Media корректно читать файлы из локальной папки www -->
+    <preference name="AllowInlineMediaPlayback" value="true" />
+
+    <!-- Плагин для музыки на месте, доступ к микрофону заблокирован для RuStore -->
     <plugin name="cordova-plugin-media" spec="^7.0.0">
         <variable name="AUDIO_RECORD_PERMISSION" value="false" />
     </plugin>
